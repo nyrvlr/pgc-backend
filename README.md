@@ -36,12 +36,19 @@ O backend segue uma arquitetura em camadas:
 
 ## Estrutura do Projeto
 src/
+
 ├── controllers/
+
 ├── services/
+
 ├── routes/
+
 ├── middlewares/
+
 ├── config/
+
 ├── prisma/
+
 └── server.ts
 
 ---
@@ -104,3 +111,6 @@ Status do Projeto
 
 ## Autoras
 Projeto desenvolvido como parte do Trabalho de Conclusão de Curso em Ciência da Computação.
+
+Nayara Valéria Joca Gonçalves
+Amanda Magalhães Lima
