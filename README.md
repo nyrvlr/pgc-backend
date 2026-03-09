@@ -125,21 +125,27 @@ A aplicação está organizada em módulos com responsabilidades bem definidas:
 src/
 
 ├── controllers/
+
 │ Responsáveis por receber as requisições HTTP e retornar as respostas da API.
 
 ├── services/
+
 │ Contêm a lógica de negócio da aplicação.
 
 ├── routes/
+
 │ Definem os endpoints da API.
 
 ├── middlewares/
+
 │ Funções intermediárias utilizadas no processamento das requisições.
 
 ├── config/
+
 │ Arquivos de configuração da aplicação.
 
 ├── prisma/
+
 │ Definição do schema do banco de dados e migrations.
 
 └── server.ts
@@ -231,10 +237,10 @@ A integridade experimental é garantida tanto **no nível da aplicação** quant
 
 Em ambiente de desenvolvimento (GitHub Codespaces):
 
-´´´
+```bash
 npm install
 npm run dev
-´´´
+```
 
 
 ---
