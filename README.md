@@ -247,12 +247,17 @@ npm run dev
 
 # Status do Projeto
 [X] Modelagem de banco validada
+
 [X] Implementação física do banco em PostgreSQL
+
 [X] Arquitetura técnica definida
 
 [ ] Setup do backend
+
 [ ] Implementação dos endpoints principais
+
 [ ] Integração com frontend
+
 [ ] Deploy
 
 
