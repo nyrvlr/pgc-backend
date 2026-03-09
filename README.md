@@ -69,26 +69,46 @@ Camada responsável pela comunicação com o banco de dados PostgreSQL.
 
 # Diagrama de Arquitetura
 Usuário
+
 │
+
 ▼
+
 Interface Web
+
 │
+
 ▼
+
 API REST (Node.js + TypeScript)
+
 │
+
 ▼
+
 Routes
+
 │
+
 ▼
+
 Controllers
+
 │
+
 ▼
+
 Services
 (Regras de Negócio)
+
 │
+
 ▼
+
 Prisma ORM
+
 │
+
 ▼
 PostgreSQL
 
