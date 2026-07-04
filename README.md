@@ -1,271 +1,82 @@
-# PGC Backend
+# pgc-backend
 
-Backend do sistema web desenvolvido para o **Projeto de Graduação (PGC)**, com foco na implementação de um experimento comportamental sobre **punição altruísta**.
+Backend do sistema do **Jogo da Punição Altruísta** (Experimento 1).
+Node + TypeScript + Express + Socket.IO + Prisma + PostgreSQL (Neon).
 
-Este repositório contém a **API responsável por gerenciar a execução do experimento**, garantindo coleta estruturada e integridade científica dos dados.
+## Pré-requisitos
 
----
+- Node.js 18+ (recomendado 20+)
+- Uma string de conexão do PostgreSQL (Neon)
 
-# Funcionalidades do Sistema
-
-A API é responsável por:
-
-- Gerenciamento de experimentos
-- Cadastro de participantes
-- Formação de duplas
-- Execução de sessões experimentais
-- Registro de tentativas e respostas
-- Registro de consenso entre participantes
-- Registro das consequências das decisões
-- Garantia de integridade científica dos dados experimentais
-
----
-
-# Tecnologias Utilizadas
-
-## Backend
-
-- Node.js  
-- Express  
-- TypeScript  
-
-## Banco de Dados
-
-- PostgreSQL (Neon)
-
-## ORM
-
-- Prisma ORM
-
-O **Prisma** é utilizado para gerenciar a comunicação com o banco de dados, permitindo consultas tipadas, controle de migrations e integração nativa com TypeScript.
-
----
-
-# Arquitetura do Sistema
-
-O backend segue uma **arquitetura em camadas**, separando responsabilidades entre controle de requisições, lógica de negócio e acesso ao banco de dados.
-
-Essa organização facilita manutenção, escalabilidade e compreensão do código.
-
-## Camadas da aplicação
-
-### Routes
-
-Responsáveis por definir os endpoints da API e encaminhar as requisições para os controllers.
-
-### Controllers
-
-Recebem as requisições HTTP, validam parâmetros e coordenam a execução das operações da aplicação.
-
-### Services
-
-Contêm a lógica de negócio do sistema, incluindo as regras relacionadas à execução do experimento.
-
-### Prisma
-
-Camada responsável pela comunicação com o banco de dados PostgreSQL.
-
----
-
-# Diagrama de Arquitetura
-Usuário
-
-│
-
-▼
-
-Interface Web
-
-│
-
-▼
-
-API REST (Node.js + TypeScript)
-
-│
-
-▼
-
-Routes
-
-│
-
-▼
-
-Controllers
-
-│
-
-▼
-
-Services
-(Regras de Negócio)
-
-│
-
-▼
-
-Prisma ORM
-
-│
-
-▼
-PostgreSQL
-
-
-Fluxo de dados:
-Usuário → Interface → API → Controllers → Services → Prisma → Banco de Dados
-
----
-
-# Estrutura do Projeto
-
-A aplicação está organizada em módulos com responsabilidades bem definidas:
-
-src/
-
-├── controllers/
-
-│ Responsáveis por receber as requisições HTTP e retornar as respostas da API.
-
-├── services/
-
-│ Contêm a lógica de negócio da aplicação.
-
-├── routes/
-
-│ Definem os endpoints da API.
-
-├── middlewares/
-
-│ Funções intermediárias utilizadas no processamento das requisições.
-
-├── config/
-
-│ Arquivos de configuração da aplicação.
-
-├── prisma/
-
-│ Definição do schema do banco de dados e migrations.
-
-└── server.ts
-Arquivo responsável por inicializar o servidor da aplicação.
-
----
-
-# Modelo de Domínio do Experimento
-
-O sistema foi modelado para representar de forma estruturada todas as etapas do experimento comportamental.
-
-As principais entidades do domínio são:
-
-### Experiment
-
-Representa um experimento criado pela pesquisadora.  
-Define as configurações gerais do estudo.
-
-### Session
-
-Cada sessão corresponde à execução de um experimento com uma dupla de participantes.
-
-### Participant
-
-Representa um participante individual do experimento.
-
-### Pair
-
-Representa a dupla de participantes que executa uma sessão experimental.
-
-### Round
-
-Uma sessão é composta por múltiplas rodadas do experimento.
-
-### Attempt
-
-Cada rodada contém tentativas nas quais os participantes observam um cartão e tomam uma decisão.
-
-### Card
-
-Cartões apresentados durante o experimento que representam diferentes situações de divisão de moedas.
-
-### Response
-
-Resposta individual de cada participante em relação ao cartão apresentado.
-
-### Consensus
-
-Resultado final da decisão da dupla após a comparação das respostas.
-
-### Consequence
-
-Consequência aplicada no experimento após a decisão da dupla (ex.: punição ou manutenção da divisão).
-
----
-
-# Banco de Dados
-
-O banco de dados foi modelado utilizando **PostgreSQL**, com foco na garantia de integridade científica dos dados coletados durante o experimento.
-
-Foram aplicados:
-
-- chaves primárias
-- chaves estrangeiras
-- constraints de unicidade
-- constraints de domínio
-- integridade referencial
-
-O banco de dados está hospedado na plataforma **Neon**.
-
----
-
-# Objetivo Científico
-
-O sistema foi projetado para garantir rigor metodológico na coleta dos dados experimentais.
-
-Entre os principais mecanismos implementados estão:
-
-- resposta única por participante em cada tentativa
-- exposição única de cartão por sessão
-- relação **1:1 entre tentativa, consenso e consequência**
-- rastreabilidade completa de todas as decisões registradas
-
-A integridade experimental é garantida tanto **no nível da aplicação** quanto **no nível estrutural do banco de dados**.
-
----
-
-# Como Rodar o Projeto
-
-Em ambiente de desenvolvimento (GitHub Codespaces):
+## Setup
 
 ```bash
+# 1. Instalar dependências
 npm install
+
+# 2. Configurar variáveis de ambiente
+cp .env.example .env
+# edite o .env e cole a DATABASE_URL do Neon (use a string COM pooling)
+
+# 3. Gerar o Prisma Client
+npm run prisma:generate
+
+# 4. Criar as tabelas no banco (primeira migration)
+npm run prisma:migrate
+# quando pedir um nome, use algo como: init
+
+# 5. Subir o servidor em desenvolvimento
 npm run dev
 ```
 
+Depois de subir, teste: <http://localhost:3000/api/health>
+Deve responder `{ "status": "ok", "database": "conectado" }`.
 
----
+## Scripts
 
-# Status do Projeto
-[X] Modelagem de banco validada
+| Script                    | O que faz |
+|---------------------------|-----------|
+| `npm run dev`             | Sobe o servidor com hot-reload (tsx watch). |
+| `npm run build`           | Compila TypeScript para `dist/`. |
+| `npm start`               | Roda a versão compilada (`dist/server.js`). |
+| `npm run prisma:generate` | Gera o Prisma Client a partir do schema. |
+| `npm run prisma:migrate`  | Cria/aplica migrations no banco. |
+| `npm run prisma:studio`   | Abre o Prisma Studio (visualizador do banco). |
 
-[X] Implementação física do banco em PostgreSQL
+## Estrutura
 
-[X] Arquitetura técnica definida
+```
+src/
+├── config/        # env, cliente Prisma (singleton)
+├── routes/        # rotas REST (administrativo: experimento, dupla, sessão, CSV)
+├── controllers/   # (a preencher) recebem req/res, chamam services
+├── services/      # regras de negócio — inclui a lógica de punição + testes
+├── sockets/       # camada de tempo real (Socket.IO) — sessão ao vivo
+├── middlewares/   # (a preencher) auth, tratamento de erro
+├── prisma/        # schema.prisma e migrations
+├── types/         # (a preencher) tipos compartilhados
+├── app.ts         # configura o Express (middlewares + rotas)
+└── server.ts      # junta Express + Socket.IO e sobe o servidor HTTP
+```
 
-[ ] Setup do backend
+## Testar a lógica de punição
 
-[ ] Implementação dos endpoints principais
+```bash
+npx tsx --test src/services/punicao.test.ts
+```
 
-[ ] Integração com frontend
+Resultado esperado: `# pass 24  # fail 0`.
 
-[ ] Deploy
+## Arquitetura em duas camadas de comunicação
 
+- **REST (`/api/...`)** — operações administrativas e pontuais.
+- **WebSocket (Socket.IO)** — a sessão ao vivo em tempo real.
 
----
+Ambas chamam os **mesmos Services**. Regra de ouro: **o cliente nunca decide
+nada** (consenso, condição vigente, moedas) — quem decide é o servidor.
 
-# Autoras
+## Nota sobre o Prisma
 
-Projeto desenvolvido como parte do **Projeto de Graduação em Computação**.
-
-**Nayara Valéria Joca Gonçalves**  
-**Amanda Magalhães Lima**
+O projeto usa **Prisma 6** (estável e maduro), escolha deliberada de
+tecnologia battle-tested adequada ao prazo do TCC. Rode
+`npm run prisma:generate` após clonar o repo ou alterar o `schema.prisma`.

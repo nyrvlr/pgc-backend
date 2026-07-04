@@ -1,0 +1,235 @@
+// =============================================================================
+// Jogo da Punição Altruísta — schema do banco (Experimento 1: ABAC / ACAB)
+// =============================================================================
+// Escopo desta versão:
+//   • Experimento 1 apenas (grupos ABAC e ACAB).
+//   • Estrutura de EXECUÇÃO e REGISTRO (o dado científico).
+//   • A tabela de cartões pré-configurados (os 64 conjuntos) virá depois —
+//     ver nota em `Attempt.cardId`.
+//
+// Princípios refletidos no schema:
+//   • Integridade científica via CONSTRAINTS no banco (não só na aplicação).
+//   • Registro imutável e ordenado no tempo (timestamps em tudo).
+//   • Uma resposta por participante por tentativa; consenso e consequência 1:1.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------------------
+
+/// Ordem de exposição às condições (controle de ordem do delineamento).
+/// ABAC = Grupo 1, ACAB = Grupo 2. Ambos usam as mesmas condições A, B e C.
+enum Grupo {
+  ABAC
+  ACAB
+}
+
+/// As três condições experimentais do Experimento 1.
+enum Condicao {
+  A // linha de base: moeda de grupo por QUALQUER consenso
+  B // moeda por punir IGUAIS ou não punir DESIGUAIS
+  C // inverso de B: punir DESIGUAIS ou não punir IGUAIS
+}
+
+/// Tipo de distribuição exibida na tentativa.
+enum TipoDistribuicao {
+  IGUAL
+  DESIGUAL
+}
+
+/// "Tato" do participante: classificação da distribuição.
+enum Tato {
+  JUSTO
+  INJUSTO
+}
+
+/// Decisão do participante sobre o distribuidor.
+enum Decisao {
+  PUNIR
+  NAO_PUNIR
+}
+
+/// Resultado da comparação das duas respostas de uma tentativa.
+enum ResultadoConsenso {
+  CONSENSO
+  DESACORDO
+}
+
+/// Estado de uma sessão.
+enum StatusSessao {
+  EM_ANDAMENTO
+  ENCERRADA
+  ABANDONADA
+}
+
+// ----------------------------------------------------------------------------
+// CONFIGURAÇÃO
+// ----------------------------------------------------------------------------
+
+/// O estudo. No escopo atual, representa o Experimento 1.
+/// A ordem das condições não vive aqui — vive na Pair (campo `grupo`).
+model Experiment {
+  id                    String   @id @default(cuid())
+  nome                  String
+  idioma                String   @default("PT") // "PT" ou "NO"
+  tentativasPorCondicao Int      @default(16) @map("tentativas_por_condicao")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  participants Participant[]
+  pairs        Pair[]
+  sessions     Session[]
+
+  @@map("experiments")
+}
+
+// ----------------------------------------------------------------------------
+// EXECUÇÃO
+// ----------------------------------------------------------------------------
+
+/// Uma criança participante. `codigo` é anônimo (ex. "D23p1") — sem dados
+/// pessoais identificáveis no banco, por boa prática ética.
+model Participant {
+  id           String @id @default(cuid())
+  codigo       String
+  experimentId String @map("experiment_id")
+
+  experiment Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  pairsAsA Pair[] @relation("ParticipanteA")
+  pairsAsB Pair[] @relation("ParticipanteB")
+
+  responses Response[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([experimentId, codigo])
+  @@map("participants")
+}
+
+/// A dupla. O `grupo` define a sequência de condições (ABAC ou ACAB).
+model Pair {
+  id           String @id @default(cuid())
+  codigo       String // ex. "D23"
+  experimentId String @map("experiment_id")
+  grupo        Grupo
+
+  participantAId String @map("participant_a_id")
+  participantBId String @map("participant_b_id")
+
+  experiment   Experiment  @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  participantA Participant @relation("ParticipanteA", fields: [participantAId], references: [id])
+  participantB Participant @relation("ParticipanteB", fields: [participantBId], references: [id])
+
+  sessions Session[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([experimentId, codigo])
+  @@map("pairs")
+}
+
+/// Execução do experimento por uma dupla (uma sessão de ~1h15).
+model Session {
+  id           String       @id @default(cuid())
+  experimentId String       @map("experiment_id")
+  pairId       String       @map("pair_id")
+  status       StatusSessao @default(EM_ANDAMENTO)
+
+  iniciadaEm  DateTime  @default(now()) @map("iniciada_em")
+  encerradaEm DateTime? @map("encerrada_em")
+
+  experiment Experiment @relation(fields: [experimentId], references: [id])
+  pair       Pair       @relation(fields: [pairId], references: [id])
+
+  attempts Attempt[]
+
+  @@map("sessions")
+}
+
+/// Uma tentativa (1–64) dentro de uma sessão. A condição vigente é derivada de
+/// (grupo da dupla, numero) pelo Service e GRAVADA aqui para auditabilidade —
+/// o dado científico não deve depender de recálculo posterior.
+model Attempt {
+  id        String @id @default(cuid())
+  sessionId String @map("session_id")
+  numero    Int // 1..64
+
+  condicao         Condicao
+  tipoDistribuicao TipoDistribuicao @map("tipo_distribuicao")
+
+  // Liga-se ao conjunto de cartões exibido. A tabela `Card` ainda não existe
+  // nesta versão; quando for criada, troca-se para uma relação.
+  cardId String? @map("card_id")
+
+  iniciadaEm DateTime @default(now()) @map("iniciada_em")
+
+  session     Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  responses   Response[]
+  consensus   Consensus?
+  consequence Consequence?
+
+  @@unique([sessionId, numero])
+  @@map("attempts")
+}
+
+// ----------------------------------------------------------------------------
+// REGISTRO (o dado científico)
+// ----------------------------------------------------------------------------
+
+/// Escolha INDIVIDUAL de um participante numa tentativa.
+model Response {
+  id            String @id @default(cuid())
+  attemptId     String @map("attempt_id")
+  participantId String @map("participant_id")
+
+  tato    Tato
+  decisao Decisao
+
+  doouMoeda Boolean @default(false) @map("doou_moeda")
+
+  respondidoEm DateTime @default(now()) @map("respondido_em")
+
+  attempt     Attempt     @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id])
+
+  @@unique([attemptId, participantId])
+  @@map("responses")
+}
+
+/// Resultado da comparação das duas respostas. Relação 1:1 com a tentativa.
+model Consensus {
+  id        String            @id @default(cuid())
+  attemptId String            @unique @map("attempt_id")
+  resultado ResultadoConsenso
+
+  culturante String?
+
+  registradoEm DateTime @default(now()) @map("registrado_em")
+
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@map("consensus")
+}
+
+/// O que o servidor liberou para a dupla. Relação 1:1 com a tentativa.
+/// Desacordos sempre resultam em 0 moedas de grupo.
+model Consequence {
+  id          String @id @default(cuid())
+  attemptId   String @unique @map("attempt_id")
+  moedasGrupo Int    @default(0) @map("moedas_grupo") // 0 ou 3
+
+  registradoEm DateTime @default(now()) @map("registrado_em")
+
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@map("consequences")
+}
