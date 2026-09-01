@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calculateDistributorFinal,
+  calculateDistributorLost,
+  calculateGroupCoins,
   calculateIndividualCost,
   classifyCulturant,
   classifyDistribution,
   hasConsensus,
+  shouldAwardCulturalConsequence,
+  shouldPunishDistributor,
 } from '../../src/domain/experiment.rules';
 
 // -----------------------------------------------------------------------------
@@ -99,5 +104,102 @@ describe('calculateIndividualCost', () => {
 
   it('NoPunish → 0', () => {
     expect(calculateIndividualCost('NoPunish')).toBe(0);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// shouldPunishDistributor
+// -----------------------------------------------------------------------------
+
+describe('shouldPunishDistributor', () => {
+  it('Punish + Punish → true (consenso de punição)', () => {
+    expect(shouldPunishDistributor('Punish', 'Punish')).toBe(true);
+  });
+
+  it('NoPunish + NoPunish → false (consenso por não punir não afeta o Distribuidor)', () => {
+    expect(shouldPunishDistributor('NoPunish', 'NoPunish')).toBe(false);
+  });
+
+  it('Punish + NoPunish → false (desacordo)', () => {
+    expect(shouldPunishDistributor('Punish', 'NoPunish')).toBe(false);
+  });
+
+  it('NoPunish + Punish → false (desacordo)', () => {
+    expect(shouldPunishDistributor('NoPunish', 'Punish')).toBe(false);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// calculateDistributorFinal
+// -----------------------------------------------------------------------------
+
+describe('calculateDistributorFinal', () => {
+  it('Unequal 24/8 → distributorFinal = 8', () => {
+    expect(calculateDistributorFinal('Unequal', 24, 8)).toBe(8);
+  });
+
+  it('Unequal 12/4 → distributorFinal = 4', () => {
+    expect(calculateDistributorFinal('Unequal', 12, 4)).toBe(4);
+  });
+
+  it('Equal 16/16 → distributorFinal = 8', () => {
+    expect(calculateDistributorFinal('Equal', 16, 16)).toBe(8);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// calculateDistributorLost
+// -----------------------------------------------------------------------------
+
+describe('calculateDistributorLost', () => {
+  it('distributorDistribution=24, distributorFinal=8 → lost = 16', () => {
+    expect(calculateDistributorLost(24, 8)).toBe(16);
+  });
+
+  it('distributorDistribution=16, distributorFinal=8 → lost = 8', () => {
+    expect(calculateDistributorLost(16, 8)).toBe(8);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// shouldAwardCulturalConsequence — matriz experimental completa (15 casos)
+// -----------------------------------------------------------------------------
+
+describe('shouldAwardCulturalConsequence', () => {
+  it.each([
+    // Condição A — qualquer consenso gera CC
+    ['A', 'Bp',  true],
+    ['A', 'Bnp', true],
+    ['A', 'Cp',  true],
+    ['A', 'Cnp', true],
+    ['A', 'D',   false],
+    // Condição B — apenas Bp e Bnp geram CC
+    ['B', 'Bp',  true],
+    ['B', 'Bnp', true],
+    ['B', 'Cp',  false],
+    ['B', 'Cnp', false],
+    ['B', 'D',   false],
+    // Condição C — apenas Cp e Cnp geram CC
+    ['C', 'Bp',  false],
+    ['C', 'Bnp', false],
+    ['C', 'Cp',  true],
+    ['C', 'Cnp', true],
+    ['C', 'D',   false],
+  ] as const)('condição %s + culturante %s → %s', (condition, culturant, expected) => {
+    expect(shouldAwardCulturalConsequence(condition, culturant)).toBe(expected);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// calculateGroupCoins
+// -----------------------------------------------------------------------------
+
+describe('calculateGroupCoins', () => {
+  it('shouldAward=true → 3', () => {
+    expect(calculateGroupCoins(true)).toBe(3);
+  });
+
+  it('shouldAward=false → 0', () => {
+    expect(calculateGroupCoins(false)).toBe(0);
   });
 });
