@@ -7,9 +7,15 @@ import {
   classifyCulturant,
   classifyDistribution,
   hasConsensus,
+  resolveTrial,
   shouldAwardCulturalConsequence,
   shouldPunishDistributor,
 } from '../../src/domain/experiment.rules';
+import type {
+  ParticipantResponses,
+  SessionState,
+  Stimulus,
+} from '../../src/domain/experiment.types';
 
 // -----------------------------------------------------------------------------
 // classifyDistribution
@@ -201,5 +207,264 @@ describe('calculateGroupCoins', () => {
 
   it('shouldAward=false → 0', () => {
     expect(calculateGroupCoins(false)).toBe(0);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// resolveTrial
+// -----------------------------------------------------------------------------
+
+const initialState: SessionState = {
+  p1Coins: 80,
+  p2Coins: 80,
+  groupCoins: 0,
+  disagreementCount: 0,
+};
+
+const stimulusEqual: Stimulus = {
+  endowment: 32,
+  distributorDistribution: 16,
+  receptorDistribution: 16,
+  distributorCharacter: 'Lucas',
+  receptorCharacter: 'Miguel',
+};
+
+const stimulusUnequal: Stimulus = {
+  endowment: 32,
+  distributorDistribution: 24,
+  receptorDistribution: 8,
+  distributorCharacter: 'Lucas',
+  receptorCharacter: 'Miguel',
+};
+
+describe('resolveTrial', () => {
+  // 1. Condição A + Equal + Punish/Punish → Bp + CC=3
+  it('A + Equal + Punish/Punish: consensus, Bp, custos=1, punishmentApplied, CC=3', () => {
+    const responses: ParticipantResponses = {
+      p1Judgment: 'Unjust',
+      p2Judgment: 'Unjust',
+      p1Punishment: 'Punish',
+      p2Punishment: 'Punish',
+    };
+    const { result, nextState } = resolveTrial('A', stimulusEqual, responses, initialState);
+
+    expect(result.consensus).toBe(true);
+    expect(result.culturant).toBe('Bp');
+    expect(result.p1IndividualCost).toBe(1);
+    expect(result.p2IndividualCost).toBe(1);
+    expect(result.punishmentApplied).toBe(true);
+    expect(result.distributorFinal).toBe(8);
+    expect(result.distributorLost).toBe(8);
+    expect(result.culturalConsequence).toBe(3);
+
+    expect(nextState.p1Coins).toBe(79);
+    expect(nextState.p2Coins).toBe(79);
+    expect(nextState.groupCoins).toBe(3);
+    expect(nextState.disagreementCount).toBe(0);
+  });
+
+  // 2. Condição A + Unequal + NoPunish/NoPunish → Bnp + CC=3
+  it('A + Unequal + NoPunish/NoPunish: Bnp, custos=0, punishmentApplied=false, CC=3', () => {
+    const responses: ParticipantResponses = {
+      p1Judgment: 'Just',
+      p2Judgment: 'Just',
+      p1Punishment: 'NoPunish',
+      p2Punishment: 'NoPunish',
+    };
+    const { result, nextState } = resolveTrial('A', stimulusUnequal, responses, initialState);
+
+    expect(result.consensus).toBe(true);
+    expect(result.culturant).toBe('Bnp');
+    expect(result.p1IndividualCost).toBe(0);
+    expect(result.p2IndividualCost).toBe(0);
+    expect(result.punishmentApplied).toBe(false);
+    expect(result.distributorFinal).toBe(8);
+    expect(result.distributorLost).toBe(16);
+    expect(result.culturalConsequence).toBe(3);
+
+    expect(nextState.p1Coins).toBe(80);
+    expect(nextState.p2Coins).toBe(80);
+    expect(nextState.groupCoins).toBe(3);
+    expect(nextState.disagreementCount).toBe(0);
+  });
+
+  // 3. Condição B + Equal + Punish/Punish → Bp + CC=3
+  it('B + Equal + Punish/Punish: Bp, CC=3', () => {
+    const responses: ParticipantResponses = {
+      p1Judgment: 'Unjust',
+      p2Judgment: 'Unjust',
+      p1Punishment: 'Punish',
+      p2Punishment: 'Punish',
+    };
+    const { result } = resolveTrial('B', stimulusEqual, responses, initialState);
+
+    expect(result.culturant).toBe('Bp');
+    expect(result.culturalConsequence).toBe(3);
+  });
+
+  // 4. Condição B + Unequal + Punish/Punish → Cp + CC=0
+  it('B + Unequal + Punish/Punish: Cp, CC=0', () => {
+    const responses: ParticipantResponses = {
+      p1Judgment: 'Unjust',
+      p2Judgment: 'Unjust',
+      p1Punishment: 'Punish',
+      p2Punishment: 'Punish',
+    };
+    const { result } = resolveTrial('B', stimulusUnequal, responses, initialState);
+
+    expect(result.culturant).toBe('Cp');
+    expect(result.culturalConsequence).toBe(0);
+  });
+
+  // 5. Condição C + Unequal + Punish/Punish → Cp + CC=3
+  it('C + Unequal + Punish/Punish: Cp, CC=3', () => {
+    const responses: ParticipantResponses = {
+      p1Judgment: 'Unjust',
+      p2Judgment: 'Unjust',
+      p1Punishment: 'Punish',
+      p2Punishment: 'Punish',
+    };
+    const { result } = resolveTrial('C', stimulusUnequal, responses, initialState);
+
+    expect(result.culturant).toBe('Cp');
+    expect(result.culturalConsequence).toBe(3);
+  });
+
+  // 6. Condição C + Equal + NoPunish/NoPunish → Cnp + CC=3
+  it('C + Equal + NoPunish/NoPunish: Cnp, CC=3', () => {
+    const responses: ParticipantResponses = {
+      p1Judgment: 'Just',
+      p2Judgment: 'Just',
+      p1Punishment: 'NoPunish',
+      p2Punishment: 'NoPunish',
+    };
+    const { result } = resolveTrial('C', stimulusEqual, responses, initialState);
+
+    expect(result.culturant).toBe('Cnp');
+    expect(result.culturalConsequence).toBe(3);
+  });
+
+  // 7. Desacordo Punish/NoPunish
+  it('Desacordo Punish/NoPunish: D, p1Cost=1, p2Cost=0, punishmentApplied=false, CC=0, disagreementCount+1', () => {
+    const responses: ParticipantResponses = {
+      p1Judgment: 'Unjust',
+      p2Judgment: 'Just',
+      p1Punishment: 'Punish',
+      p2Punishment: 'NoPunish',
+    };
+    const { result, nextState } = resolveTrial('A', stimulusUnequal, responses, initialState);
+
+    expect(result.consensus).toBe(false);
+    expect(result.culturant).toBe('D');
+    expect(result.p1IndividualCost).toBe(1);
+    expect(result.p2IndividualCost).toBe(0);
+    expect(result.punishmentApplied).toBe(false);
+    expect(result.culturalConsequence).toBe(0);
+
+    expect(nextState.p1Coins).toBe(79);
+    expect(nextState.p2Coins).toBe(80);
+    expect(nextState.groupCoins).toBe(0);
+    expect(nextState.disagreementCount).toBe(1);
+  });
+
+  // 8. Desacordo NoPunish/Punish
+  it('Desacordo NoPunish/Punish: D, p1Cost=0, p2Cost=1, punishmentApplied=false, CC=0, disagreementCount+1', () => {
+    const responses: ParticipantResponses = {
+      p1Judgment: 'Just',
+      p2Judgment: 'Unjust',
+      p1Punishment: 'NoPunish',
+      p2Punishment: 'Punish',
+    };
+    const { result, nextState } = resolveTrial('A', stimulusUnequal, responses, initialState);
+
+    expect(result.consensus).toBe(false);
+    expect(result.culturant).toBe('D');
+    expect(result.p1IndividualCost).toBe(0);
+    expect(result.p2IndividualCost).toBe(1);
+    expect(result.punishmentApplied).toBe(false);
+    expect(result.culturalConsequence).toBe(0);
+
+    expect(nextState.p1Coins).toBe(80);
+    expect(nextState.p2Coins).toBe(79);
+    expect(nextState.groupCoins).toBe(0);
+    expect(nextState.disagreementCount).toBe(1);
+  });
+
+  // 9. p1Judgment / p2Judgment não afetam o resultado experimental
+  it('julgamento Just vs Unjust não altera result nem nextState', () => {
+    const responsesJust: ParticipantResponses = {
+      p1Judgment: 'Just',
+      p2Judgment: 'Just',
+      p1Punishment: 'Punish',
+      p2Punishment: 'Punish',
+    };
+    const responsesUnjust: ParticipantResponses = {
+      p1Judgment: 'Unjust',
+      p2Judgment: 'Unjust',
+      p1Punishment: 'Punish',
+      p2Punishment: 'Punish',
+    };
+
+    const outcomeJust   = resolveTrial('C', stimulusUnequal, responsesJust,   initialState);
+    const outcomeUnjust = resolveTrial('C', stimulusUnequal, responsesUnjust, initialState);
+
+    expect(outcomeJust.result).toEqual(outcomeUnjust.result);
+    expect(outcomeJust.nextState).toEqual(outcomeUnjust.nextState);
+  });
+
+  // 10. Estado não inicial + consequência cultural + imutabilidade do estado recebido
+  it('estado acumulado: nextState correto e currentState não é mutado', () => {
+    const currentState: SessionState = {
+      p1Coins: 57,
+      p2Coins: 63,
+      groupCoins: 12,
+      disagreementCount: 4,
+    };
+    const responses: ParticipantResponses = {
+      p1Judgment: 'Unjust',
+      p2Judgment: 'Unjust',
+      p1Punishment: 'Punish',
+      p2Punishment: 'Punish',
+    };
+    const { result, nextState } = resolveTrial('C', stimulusUnequal, responses, currentState);
+
+    expect(result.culturalConsequence).toBe(3);
+
+    expect(nextState.p1Coins).toBe(56);
+    expect(nextState.p2Coins).toBe(62);
+    expect(nextState.groupCoins).toBe(15);
+    expect(nextState.disagreementCount).toBe(4);
+
+    // currentState não deve ter sido mutado
+    expect(currentState.p1Coins).toBe(57);
+    expect(currentState.p2Coins).toBe(63);
+    expect(currentState.groupCoins).toBe(12);
+    expect(currentState.disagreementCount).toBe(4);
+  });
+
+  // 11. Desacordo sobre estado já acumulado
+  it('desacordo sobre estado acumulado: disagreementCount+1, custos e cofrinho corretos', () => {
+    const currentState: SessionState = {
+      p1Coins: 57,
+      p2Coins: 63,
+      groupCoins: 12,
+      disagreementCount: 4,
+    };
+    const responses: ParticipantResponses = {
+      p1Judgment: 'Unjust',
+      p2Judgment: 'Just',
+      p1Punishment: 'Punish',
+      p2Punishment: 'NoPunish',
+    };
+    const { result, nextState } = resolveTrial('A', stimulusUnequal, responses, currentState);
+
+    expect(result.culturant).toBe('D');
+    expect(result.culturalConsequence).toBe(0);
+    expect(result.punishmentApplied).toBe(false);
+
+    expect(nextState.p1Coins).toBe(56);
+    expect(nextState.p2Coins).toBe(63);
+    expect(nextState.groupCoins).toBe(12);
+    expect(nextState.disagreementCount).toBe(5);
   });
 });
