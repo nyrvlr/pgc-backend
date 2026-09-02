@@ -101,3 +101,27 @@ export async function startSession(sessionId: string) {
     });
   });
 }
+
+// ---------------------------------------------------------------------------
+// getSession
+// ---------------------------------------------------------------------------
+
+export async function getSession(sessionId: string) {
+  return prisma.session.findUnique({
+    where: { id: sessionId },
+    include: {
+      participants: {
+        select: {
+          id: true,
+          slot: true,
+          displayName: true,
+          participantCode: true,
+          joinedAt: true,
+          lastSeenAt: true,
+          createdAt: true,
+        },
+      },
+      _count: { select: { attempts: true } },
+    },
+  });
+}
