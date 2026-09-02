@@ -94,6 +94,8 @@ model Stimulus {
 
   trialTemplates TrialTemplate[]
 
+  // Chave de idempotência para o seed: combinação única na planilha G1P1
+  @@unique([distributorCharacter, distributorDistribution, receptorDistribution])
   @@map("stimuli")
 }
 
