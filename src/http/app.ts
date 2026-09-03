@@ -8,6 +8,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import cors from 'cors';
 import { SessionBootstrapError } from '../services/session.drafts';
 import { sessionRouter } from './session.router';
+import { participantRouter } from './participant.router';
 
 export const app = express();
 
@@ -23,6 +24,7 @@ app.use(express.json());
 // ---------------------------------------------------------------------------
 
 app.use('/sessions', sessionRouter);
+app.use('/participant', participantRouter);
 
 // ---------------------------------------------------------------------------
 // Tratamento centralizado de erros

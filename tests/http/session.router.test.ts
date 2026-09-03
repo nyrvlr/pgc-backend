@@ -13,6 +13,11 @@ vi.mock('../../src/services/session.service', () => ({
   getSession:     vi.fn(),
 }));
 
+// participant.service é importado pelo app via participant.router — mockar para isolar Prisma
+vi.mock('../../src/services/participant.service', () => ({
+  getParticipantState: vi.fn(),
+  deriveStage: vi.fn(),
+}));
 import * as sessionService from '../../src/services/session.service';
 import { SessionBootstrapError } from '../../src/services/session.drafts';
 
