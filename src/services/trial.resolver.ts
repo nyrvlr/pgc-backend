@@ -109,7 +109,8 @@ export function resolveTrialFromDb(
         disagreementCount: 0,
       };
 
-  // Reconstrói Stimulus a partir do snapshot do Attempt
+  // Reconstrói Stimulus a partir do snapshot do Attempt.
+  // resolveTrial() chama classifyDistribution() internamente para derivar Equal/Unequal.
   const stimulus = {
     endowment: attempt.endowment,
     distributorDistribution: attempt.distributorDistribution,

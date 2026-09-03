@@ -288,6 +288,9 @@ model Response {
   punishment   PunishmentDecision? @map("punishment")
   punishmentAt DateTime?           @map("punishment_at")
 
+  // Etapa 3 — confirmação de visualização do resultado
+  resultAcknowledgedAt DateTime? @map("result_acknowledged_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
