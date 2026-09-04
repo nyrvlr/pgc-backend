@@ -7,11 +7,13 @@ import { app } from '../../src/http/app';
 // ---------------------------------------------------------------------------
 
 vi.mock('../../src/services/session.service', () => ({
-  createSession:  vi.fn(),
-  addParticipant: vi.fn(),
-  startSession:   vi.fn(),
-  getSession:     vi.fn(),
-  listSessions:   vi.fn(),
+  createSession:        vi.fn(),
+  addParticipant:       vi.fn(),
+  startSession:         vi.fn(),
+  getSession:           vi.fn(),
+  listSessions:         vi.fn(),
+  getSessionPanel:      vi.fn(),
+  getParticipantAccess: vi.fn(),
 }));
 
 vi.mock('../../src/services/auth.service', () => ({
@@ -363,6 +365,119 @@ describe('GET /sessions/:sessionId', () => {
   it('500 para erro inesperado', async () => {
     vi.mocked(sessionService.getSession).mockRejectedValue(new Error('timeout'));
     const res = await request(app).get('/sessions/sess-001').set('Authorization', BEARER);
+    expect(res.status).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /sessions/:sessionId/panel
+// ---------------------------------------------------------------------------
+
+describe('GET /sessions/:sessionId/panel', () => {
+  const mockPanel = {
+    session: {
+      id: 'sess-001', name: 'Turma A', sequenceVariant: 'ABAC',
+      status: 'IN_PROGRESS', startedAt: new Date().toISOString(), completedAt: null,
+    },
+    participants: [
+      { id: 'sp-001', slot: 'P1', displayName: 'Alice', participantCode: 'G1P1', joinedAt: null, lastSeenAt: null },
+      { id: 'sp-002', slot: 'P2', displayName: 'Bob',   participantCode: 'G1P2', joinedAt: null, lastSeenAt: null },
+    ],
+    progress: { totalAttempts: 64, finalizedAttempts: 10, acknowledgedAttempts: 9 },
+  };
+
+  it('200 com panel completo para a pesquisadora dona', async () => {
+    vi.mocked(sessionService.getSessionPanel).mockResolvedValue(mockPanel as never);
+    const res = await request(app).get('/sessions/sess-001/panel').set('Authorization', BEARER);
+    expect(res.status).toBe(200);
+    expect(res.body.session.id).toBe('sess-001');
+    expect(res.body.progress.totalAttempts).toBe(64);
+    expect(sessionService.getSessionPanel).toHaveBeenCalledWith('sess-001', RES_ID);
+  });
+
+  it('panel não expõe accessToken dos participantes', async () => {
+    vi.mocked(sessionService.getSessionPanel).mockResolvedValue(mockPanel as never);
+    const res = await request(app).get('/sessions/sess-001/panel').set('Authorization', BEARER);
+    expect(res.status).toBe(200);
+    for (const p of res.body.participants) {
+      expect(p.accessToken).toBeUndefined();
+    }
+  });
+
+  it('panel não expõe dados científicos (judgment, punishment, culturant)', async () => {
+    vi.mocked(sessionService.getSessionPanel).mockResolvedValue(mockPanel as never);
+    const res = await request(app).get('/sessions/sess-001/panel').set('Authorization', BEARER);
+    const json = JSON.stringify(res.body);
+    expect(json).not.toContain('judgment');
+    expect(json).not.toContain('punishment');
+    expect(json).not.toContain('culturant');
+    expect(json).not.toContain('condition');
+  });
+
+  it('404 quando sessão pertence a outra pesquisadora', async () => {
+    vi.mocked(sessionService.getSessionPanel).mockRejectedValue(
+      new SessionBootstrapError('Session não encontrada: sess-001')
+    );
+    const res = await request(app).get('/sessions/sess-001/panel').set('Authorization', BEARER);
+    expect(res.status).toBe(404);
+  });
+
+  it('401 sem token', async () => {
+    const res = await request(app).get('/sessions/sess-001/panel');
+    expect(res.status).toBe(401);
+  });
+
+  it('500 para erro inesperado', async () => {
+    vi.mocked(sessionService.getSessionPanel).mockRejectedValue(new Error('DB'));
+    const res = await request(app).get('/sessions/sess-001/panel').set('Authorization', BEARER);
+    expect(res.status).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /sessions/:sessionId/participant-access
+// ---------------------------------------------------------------------------
+
+describe('GET /sessions/:sessionId/participant-access', () => {
+  const mockAccess = [
+    { slot: 'P1', displayName: 'Alice', participantCode: 'G1P1', accessToken: 'tok-p1-secret' },
+    { slot: 'P2', displayName: 'Bob',   participantCode: 'G1P2', accessToken: 'tok-p2-secret' },
+  ];
+
+  it('200 retorna slot, displayName, participantCode e accessToken', async () => {
+    vi.mocked(sessionService.getParticipantAccess).mockResolvedValue(mockAccess as never);
+    const res = await request(app).get('/sessions/sess-001/participant-access').set('Authorization', BEARER);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    expect(res.body[0].accessToken).toBe('tok-p1-secret');
+    expect(res.body[1].accessToken).toBe('tok-p2-secret');
+    expect(sessionService.getParticipantAccess).toHaveBeenCalledWith('sess-001', RES_ID);
+  });
+
+  it('accessToken aparece SOMENTE neste endpoint (não em /panel nem em GET /:id)', async () => {
+    vi.mocked(sessionService.getParticipantAccess).mockResolvedValue(mockAccess as never);
+    const res = await request(app).get('/sessions/sess-001/participant-access').set('Authorization', BEARER);
+    expect(res.status).toBe(200);
+    // Confirma que os tokens estão presentes apenas aqui
+    expect(JSON.stringify(res.body)).toContain('tok-p1-secret');
+  });
+
+  it('404 quando sessão pertence a outra pesquisadora', async () => {
+    vi.mocked(sessionService.getParticipantAccess).mockRejectedValue(
+      new SessionBootstrapError('Session não encontrada: sess-001')
+    );
+    const res = await request(app).get('/sessions/sess-001/participant-access').set('Authorization', BEARER);
+    expect(res.status).toBe(404);
+  });
+
+  it('401 sem token', async () => {
+    const res = await request(app).get('/sessions/sess-001/participant-access');
+    expect(res.status).toBe(401);
+  });
+
+  it('500 para erro inesperado', async () => {
+    vi.mocked(sessionService.getParticipantAccess).mockRejectedValue(new Error('DB'));
+    const res = await request(app).get('/sessions/sess-001/participant-access').set('Authorization', BEARER);
     expect(res.status).toBe(500);
   });
 });

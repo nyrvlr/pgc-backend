@@ -159,3 +159,75 @@ export async function listSessions(researcherId: string) {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// getSessionPanel
+// ---------------------------------------------------------------------------
+
+export async function getSessionPanel(sessionId: string, researcherId: string) {
+  await loadOwnedSession(prisma, sessionId, researcherId);
+
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true, name: true, sequenceVariant: true,
+      status: true, startedAt: true, completedAt: true,
+      participants: {
+        select: {
+          id: true, slot: true, displayName: true,
+          participantCode: true, joinedAt: true, lastSeenAt: true,
+          // accessToken excluído
+        },
+      },
+      attempts: {
+        select: {
+          completedAt: true,
+          responses: {
+            select: { resultAcknowledgedAt: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!session) throw new SessionBootstrapError(`Session não encontrada: ${sessionId}`);
+
+  const totalAttempts = session.attempts.length;
+  const finalizedAttempts = session.attempts.filter(
+    (a: { completedAt: Date | null; responses: { resultAcknowledgedAt: Date | null }[] }) =>
+      a.completedAt !== null
+  ).length;
+  const acknowledgedAttempts = session.attempts.filter(
+    (a: { completedAt: Date | null; responses: { resultAcknowledgedAt: Date | null }[] }) =>
+      a.responses.length === 2 &&
+      a.responses.every((r: { resultAcknowledgedAt: Date | null }) => r.resultAcknowledgedAt !== null),
+  ).length;
+
+  return {
+    session: {
+      id: session.id, name: session.name,
+      sequenceVariant: session.sequenceVariant, status: session.status,
+      startedAt: session.startedAt, completedAt: session.completedAt,
+    },
+    participants: session.participants,
+    progress: { totalAttempts, finalizedAttempts, acknowledgedAttempts },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// getParticipantAccess
+// ---------------------------------------------------------------------------
+
+export async function getParticipantAccess(sessionId: string, researcherId: string) {
+  await loadOwnedSession(prisma, sessionId, researcherId);
+
+  const participants = await prisma.sessionParticipant.findMany({
+    where: { sessionId },
+    select: {
+      slot: true, displayName: true, participantCode: true, accessToken: true,
+    },
+    orderBy: { slot: 'asc' },
+  });
+
+  return participants;
+}

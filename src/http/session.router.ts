@@ -10,6 +10,8 @@ import {
   addParticipant,
   createSession,
   getSession,
+  getSessionPanel,
+  getParticipantAccess,
   listSessions,
   startSession,
 } from '../services/session.service';
@@ -120,6 +122,34 @@ sessionRouter.get('/:sessionId', async (req: Request, res: Response, next: NextF
       return;
     }
     res.status(200).json(session);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /sessions/:sessionId/panel
+// ---------------------------------------------------------------------------
+
+sessionRouter.get('/:sessionId/panel', async (req: Request, res: Response, next: NextFunction) => {
+  const sessionId = req.params['sessionId'] as string;
+  try {
+    const panel = await getSessionPanel(sessionId, req.researcherId!);
+    res.status(200).json(panel);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /sessions/:sessionId/participant-access
+// ---------------------------------------------------------------------------
+
+sessionRouter.get('/:sessionId/participant-access', async (req: Request, res: Response, next: NextFunction) => {
+  const sessionId = req.params['sessionId'] as string;
+  try {
+    const access = await getParticipantAccess(sessionId, req.researcherId!);
+    res.status(200).json(access);
   } catch (err) {
     next(err);
   }
