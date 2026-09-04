@@ -1,7 +1,8 @@
 /**
  * session.router.ts
  * Endpoints HTTP de gerenciamento de sessões.
- * Delega toda lógica ao session.service — sem regras de negócio aqui.
+ * Todas as rotas exigem autenticação JWT da pesquisadora.
+ * researcherId vem sempre de req.researcherId (JWT), nunca do body.
  */
 
 import { Router, type Request, type Response, type NextFunction } from 'express';
@@ -9,26 +10,41 @@ import {
   addParticipant,
   createSession,
   getSession,
+  listSessions,
   startSession,
 } from '../services/session.service';
+import { researcherAuth } from './researcher-auth.middleware';
 import { type SequenceVariant } from '../domain/experiment.types';
 
 export const sessionRouter = Router();
 
+// Todas as rotas exigem JWT válido da pesquisadora
+sessionRouter.use(researcherAuth);
+
 const VALID_VARIANTS: SequenceVariant[] = ['ABAC', 'ACAB', 'BCBC', 'CBCB'];
 const VALID_SLOTS = ['P1', 'P2'];
+
+// ---------------------------------------------------------------------------
+// GET /sessions  — lista sessões da pesquisadora autenticada
+// ---------------------------------------------------------------------------
+
+sessionRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const sessions = await listSessions(req.researcherId!);
+    res.status(200).json(sessions);
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // POST /sessions
 // ---------------------------------------------------------------------------
 
 sessionRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
-  const { researcherId, name, sequenceVariant } = req.body ?? {};
+  const { name, sequenceVariant } = req.body ?? {};
+  // researcherId vem do JWT — body.researcherId é ignorado
 
-  if (!researcherId || typeof researcherId !== 'string') {
-    res.status(400).json({ error: 'researcherId é obrigatório.' });
-    return;
-  }
   if (!name || typeof name !== 'string') {
     res.status(400).json({ error: 'name é obrigatório.' });
     return;
@@ -39,7 +55,7 @@ sessionRouter.post('/', async (req: Request, res: Response, next: NextFunction) 
   }
 
   try {
-    const session = await createSession(researcherId, name, sequenceVariant as SequenceVariant);
+    const session = await createSession(req.researcherId!, name, sequenceVariant as SequenceVariant);
     res.status(201).json(session);
   } catch (err) {
     next(err);
@@ -68,7 +84,9 @@ sessionRouter.post('/:sessionId/participants', async (req: Request, res: Respons
   }
 
   try {
-    const participant = await addParticipant(sessionId, slot as 'P1' | 'P2', displayName, participantCode);
+    const participant = await addParticipant(
+      sessionId, req.researcherId!, slot as 'P1' | 'P2', displayName, participantCode
+    );
     res.status(201).json(participant);
   } catch (err) {
     next(err);
@@ -82,7 +100,7 @@ sessionRouter.post('/:sessionId/participants', async (req: Request, res: Respons
 sessionRouter.post('/:sessionId/start', async (req: Request, res: Response, next: NextFunction) => {
   const sessionId = req.params['sessionId'] as string;
   try {
-    const session = await startSession(sessionId);
+    const session = await startSession(sessionId, req.researcherId!);
     res.status(200).json(session);
   } catch (err) {
     next(err);
@@ -96,7 +114,7 @@ sessionRouter.post('/:sessionId/start', async (req: Request, res: Response, next
 sessionRouter.get('/:sessionId', async (req: Request, res: Response, next: NextFunction) => {
   const sessionId = req.params['sessionId'] as string;
   try {
-    const session = await getSession(sessionId);
+    const session = await getSession(sessionId, req.researcherId!);
     if (!session) {
       res.status(404).json({ error: `Session não encontrada: ${sessionId}` });
       return;

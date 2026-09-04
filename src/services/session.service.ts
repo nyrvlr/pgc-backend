@@ -3,17 +3,37 @@
  * Bootstrap persistente de sessões experimentais.
  *
  * Responsabilidades:
- *   createSession     — cria Session WAITING
- *   addParticipant    — adiciona SessionParticipant (P1 ou P2)
- *   startSession      — transição WAITING → IN_PROGRESS + cria 64 Attempts
- *
- * Não implementa: API, auth, Socket.IO, Response, TrialRecord, resolveTrial.
+ *   createSession    — cria Session WAITING vinculada ao pesquisador autenticado
+ *   addParticipant   — adiciona SessionParticipant (P1 ou P2), valida ownership
+ *   startSession     — transição WAITING → IN_PROGRESS + cria 64 Attempts, valida ownership
+ *   getSession       — retorna sessão com participantes e contagem, valida ownership
+ *   listSessions     — lista sessões da pesquisadora autenticada
  */
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { type SequenceVariant } from '../domain/experiment.types';
 import { buildAttemptDrafts, SessionBootstrapError } from './session.drafts';
+
+// ---------------------------------------------------------------------------
+// Helper: carrega e valida ownership de uma Session
+// Retorna 404 (sem revelar existência) se não encontrada ou de outro pesquisador
+// ---------------------------------------------------------------------------
+
+async function loadOwnedSession(
+  tx: Prisma.TransactionClient | typeof prisma,
+  sessionId: string,
+  researcherId: string,
+) {
+  const session = await (tx as typeof prisma).session.findUnique({
+    where: { id: sessionId },
+  });
+  // Retorna o mesmo erro se não existe ou se pertence a outro — não revela existência
+  if (!session || session.researcherId !== researcherId) {
+    throw new SessionBootstrapError(`Session não encontrada: ${sessionId}`);
+  }
+  return session;
+}
 
 // ---------------------------------------------------------------------------
 // createSession
@@ -35,10 +55,14 @@ export async function createSession(
 
 export async function addParticipant(
   sessionId: string,
+  researcherId: string,
   slot: 'P1' | 'P2',
   displayName: string,
   participantCode: string,
 ) {
+  // Valida ownership antes de criar o participante
+  await loadOwnedSession(prisma, sessionId, researcherId);
+
   return prisma.sessionParticipant.create({
     data: { sessionId, slot, displayName, participantCode },
   });
@@ -48,26 +72,11 @@ export async function addParticipant(
 // startSession
 // ---------------------------------------------------------------------------
 
-/**
- * Transição WAITING → IN_PROGRESS em transação atômica.
- *
- * Garante:
- * 1. Session existe e está WAITING
- * 2. Exatamente P1 e P2 presentes
- * 3. 64 TrialTemplates carregados com Stimulus
- * 4. 4 blocos × 16 (validado por buildAttemptDrafts)
- * 5. 64 Attempts criados com snapshot completo
- * 6. Session atualizada para IN_PROGRESS + startedAt = now
- *
- * Se qualquer etapa falhar, a transação é revertida e nenhum Attempt persiste.
- */
-export async function startSession(sessionId: string) {
+export async function startSession(sessionId: string, researcherId: string) {
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    // 1. Carregar Session e validar status
-    const session = await tx.session.findUnique({ where: { id: sessionId } });
-    if (!session) {
-      throw new SessionBootstrapError(`Session não encontrada: ${sessionId}`);
-    }
+    // 1. Carregar Session, validar existência e ownership
+    const session = await loadOwnedSession(tx, sessionId, researcherId);
+
     if (session.status !== 'WAITING') {
       throw new SessionBootstrapError(
         `Session ${sessionId} não está em WAITING (status atual: ${session.status}).`
@@ -89,9 +98,8 @@ export async function startSession(sessionId: string) {
       include: { stimulus: true },
     });
 
-    // 4 + 5. Gerar drafts (valida blocos internamente) e criar Attempts
+    // 4 + 5. Gerar drafts e criar Attempts
     const drafts = buildAttemptDrafts(sessionId, session.sequenceVariant, templates);
-
     await tx.attempt.createMany({ data: drafts });
 
     // 6. Atualizar Session para IN_PROGRESS
@@ -106,7 +114,10 @@ export async function startSession(sessionId: string) {
 // getSession
 // ---------------------------------------------------------------------------
 
-export async function getSession(sessionId: string) {
+export async function getSession(sessionId: string, researcherId: string) {
+  // Valida ownership (sem revelar existência a outros pesquisadores)
+  await loadOwnedSession(prisma, sessionId, researcherId);
+
   return prisma.session.findUnique({
     where: { id: sessionId },
     include: {
@@ -119,8 +130,31 @@ export async function getSession(sessionId: string) {
           joinedAt: true,
           lastSeenAt: true,
           createdAt: true,
+          // accessToken excluído explicitamente
         },
       },
+      _count: { select: { attempts: true } },
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// listSessions
+// ---------------------------------------------------------------------------
+
+export async function listSessions(researcherId: string) {
+  return prisma.session.findMany({
+    where: { researcherId },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      name: true,
+      sequenceVariant: true,
+      status: true,
+      startedAt: true,
+      completedAt: true,
+      createdAt: true,
+      updatedAt: true,
       _count: { select: { attempts: true } },
     },
   });
