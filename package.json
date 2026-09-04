@@ -11,7 +11,8 @@
     "prisma:migrate": "prisma migrate dev --schema src/prisma/schema.prisma",
     "prisma:studio": "prisma studio --schema src/prisma/schema.prisma",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "researcher:provision": "tsx src/scripts/provision-researcher.cli.ts"
   },
   "keywords": [],
   "author": "",
