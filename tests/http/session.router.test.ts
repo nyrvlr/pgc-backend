@@ -24,6 +24,10 @@ vi.mock('../../src/services/export.csv', () => ({
   serializeExportCsv: vi.fn(),
 }));
 
+vi.mock('../../src/services/export.model.csv', () => ({
+  serializeModelExportCsv: vi.fn(),
+}));
+
 vi.mock('../../src/services/auth.service', () => ({
   login:         vi.fn(),
   verifyToken:   vi.fn(),
@@ -41,6 +45,7 @@ import * as sessionService from '../../src/services/session.service';
 import * as authService from '../../src/services/auth.service';
 import * as exportService from '../../src/services/export.service';
 import * as exportCsv from '../../src/services/export.csv';
+import * as exportModelCsv from '../../src/services/export.model.csv';
 import { SessionBootstrapError } from '../../src/services/session.drafts';
 
 // ---------------------------------------------------------------------------
@@ -617,5 +622,92 @@ describe('GET /sessions/:sessionId/export.csv', () => {
       .set('Authorization', BEARER);
     expect(res.status).toBe(200);
     expect(res.body).toBeInstanceOf(Array);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /sessions/:sessionId/export-model.csv
+// ---------------------------------------------------------------------------
+
+describe('GET /sessions/:sessionId/export-model.csv', () => {
+  const MOCK_MODEL_CSV =
+    'Condition,Trial,Distributor,Initial,Distributor,Receptor,D Final,D lost (D-),' +
+    'Igual/Desigual,BOY,GIRL,BOY,GIRL,G.Coins,G.Coins Cum.,Norm P1,Norm P2,P1,P2,' +
+    'Culturant,D,D Cumulated,APtype,COMENTÁRIOS\n' +
+    'A,1,Lucas,16,12,4,4,8,U,i,i,1,0,0,0,SN,SN,79,80,D,1,1,,';
+
+  beforeEach(() => {
+    vi.mocked(exportService.buildExportRows).mockResolvedValue([] as never);
+    vi.mocked(exportModelCsv.serializeModelExportCsv).mockReturnValue(MOCK_MODEL_CSV);
+  });
+
+  it('401 sem token de autenticação', async () => {
+    const res = await request(app).get('/sessions/sess-001/export-model.csv');
+    expect(res.status).toBe(401);
+  });
+
+  it('chama buildExportRows com sessionId e researcherId do JWT', async () => {
+    await request(app)
+      .get('/sessions/sess-001/export-model.csv')
+      .set('Authorization', BEARER);
+    expect(exportService.buildExportRows).toHaveBeenCalledWith('sess-001', RES_ID);
+  });
+
+  it('200 com resposta bem-sucedida', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export-model.csv')
+      .set('Authorization', BEARER);
+    expect(res.status).toBe(200);
+  });
+
+  it('Content-Type: text/csv; charset=utf-8', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export-model.csv')
+      .set('Authorization', BEARER);
+    expect(res.headers['content-type']).toMatch(/text\/csv/);
+    expect(res.headers['content-type']).toMatch(/charset=utf-8/);
+  });
+
+  it('Content-Disposition com filename -model.csv', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export-model.csv')
+      .set('Authorization', BEARER);
+    expect(res.headers['content-disposition'])
+      .toBe('attachment; filename="session-sess-001-model.csv"');
+  });
+
+  it('Cache-Control: no-store', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export-model.csv')
+      .set('Authorization', BEARER);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('body contém cabeçalho de 24 colunas e linha de dados', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export-model.csv')
+      .set('Authorization', BEARER);
+    expect(res.text).toContain('Condition,Trial,Distributor');
+    expect(res.text).toContain('COMENTÁRIOS');
+  });
+
+  it('404 quando sessão não existe ou pertence a outra pesquisadora', async () => {
+    vi.mocked(exportService.buildExportRows).mockRejectedValue(
+      new SessionBootstrapError('Session não encontrada: sess-001')
+    );
+    const res = await request(app)
+      .get('/sessions/sess-001/export-model.csv')
+      .set('Authorization', BEARER);
+    expect(res.status).toBe(404);
+  });
+
+  it('não interfere no endpoint export.csv existente', async () => {
+    vi.mocked(exportCsv.serializeExportCsv).mockReturnValue('sessionId,sessionName\nsess-001,Turma A');
+    const res = await request(app)
+      .get('/sessions/sess-001/export.csv')
+      .set('Authorization', BEARER);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-disposition']).toContain('session-sess-001.csv');
+    expect(res.headers['content-disposition']).not.toContain('model');
   });
 });

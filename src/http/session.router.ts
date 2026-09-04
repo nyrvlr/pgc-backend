@@ -19,6 +19,7 @@ import { researcherAuth } from './researcher-auth.middleware';
 import { type SequenceVariant } from '../domain/experiment.types';
 import { buildExportRows } from '../services/export.service';
 import { serializeExportCsv } from '../services/export.csv';
+import { serializeModelExportCsv } from '../services/export.model.csv';
 
 export const sessionRouter = Router();
 
@@ -169,6 +170,24 @@ sessionRouter.get('/:sessionId/export.csv', async (req: Request, res: Response, 
     const csv  = serializeExportCsv(rows);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="session-${sessionId}.csv"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).send(csv);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /sessions/:sessionId/export-model.csv
+// ---------------------------------------------------------------------------
+
+sessionRouter.get('/:sessionId/export-model.csv', async (req: Request, res: Response, next: NextFunction) => {
+  const sessionId = req.params['sessionId'] as string;
+  try {
+    const rows = await buildExportRows(sessionId, req.researcherId!);
+    const csv  = serializeModelExportCsv(rows);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="session-${sessionId}-model.csv"`);
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).send(csv);
   } catch (err) {
