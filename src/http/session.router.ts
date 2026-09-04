@@ -17,6 +17,8 @@ import {
 } from '../services/session.service';
 import { researcherAuth } from './researcher-auth.middleware';
 import { type SequenceVariant } from '../domain/experiment.types';
+import { buildExportRows } from '../services/export.service';
+import { serializeExportCsv } from '../services/export.csv';
 
 export const sessionRouter = Router();
 
@@ -151,6 +153,24 @@ sessionRouter.get('/:sessionId/participant-access', async (req: Request, res: Re
   try {
     const access = await getParticipantAccess(sessionId, req.researcherId!);
     res.status(200).json(access);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /sessions/:sessionId/export.csv
+// ---------------------------------------------------------------------------
+
+sessionRouter.get('/:sessionId/export.csv', async (req: Request, res: Response, next: NextFunction) => {
+  const sessionId = req.params['sessionId'] as string;
+  try {
+    const rows = await buildExportRows(sessionId, req.researcherId!);
+    const csv  = serializeExportCsv(rows);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="session-${sessionId}.csv"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).send(csv);
   } catch (err) {
     next(err);
   }

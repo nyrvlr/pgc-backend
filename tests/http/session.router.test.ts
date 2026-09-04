@@ -16,6 +16,14 @@ vi.mock('../../src/services/session.service', () => ({
   getParticipantAccess: vi.fn(),
 }));
 
+vi.mock('../../src/services/export.service', () => ({
+  buildExportRows: vi.fn(),
+}));
+
+vi.mock('../../src/services/export.csv', () => ({
+  serializeExportCsv: vi.fn(),
+}));
+
 vi.mock('../../src/services/auth.service', () => ({
   login:         vi.fn(),
   verifyToken:   vi.fn(),
@@ -31,6 +39,8 @@ vi.mock('../../src/services/response.service', () => ({
 
 import * as sessionService from '../../src/services/session.service';
 import * as authService from '../../src/services/auth.service';
+import * as exportService from '../../src/services/export.service';
+import * as exportCsv from '../../src/services/export.csv';
 import { SessionBootstrapError } from '../../src/services/session.drafts';
 
 // ---------------------------------------------------------------------------
@@ -512,5 +522,100 @@ describe('GET /sessions/:sessionId/participant-access', () => {
     vi.mocked(sessionService.getParticipantAccess).mockRejectedValue(new Error('DB'));
     const res = await request(app).get('/sessions/sess-001/participant-access').set('Authorization', BEARER);
     expect(res.status).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /sessions/:sessionId/export.csv
+// ---------------------------------------------------------------------------
+
+describe('GET /sessions/:sessionId/export.csv', () => {
+  const MOCK_CSV =
+    'sessionId,sessionName,sequenceVariant,sessionStatus,p1ParticipantCode,p2ParticipantCode,' +
+    'globalNumber,blockNumber,trialInBlock,condition,endowment,distributorCharacter,receptorCharacter,' +
+    'distributorDistribution,receptorDistribution,p1Judgment,p1JudgmentAt,p1Punishment,p1PunishmentAt,' +
+    'p1ResultAcknowledgedAt,p2Judgment,p2JudgmentAt,p2Punishment,p2PunishmentAt,p2ResultAcknowledgedAt,' +
+    'consensus,culturant,p1IndividualCost,p2IndividualCost,punishmentApplied,distributorFinal,' +
+    'distributorLost,culturalConsequence,p1CoinsAfter,p2CoinsAfter,groupCoinsAfter,disagreementCountAfter,' +
+    'attemptStartedAt,attemptCompletedAt\n' +
+    'sess-001,Turma A,ABAC,COMPLETED,G1P1,G1P2,1,1,1,A,32,Lucas,Isaac,24,8,Unjust,' +
+    '2024-10-24T10:00:00.000Z,Punish,2024-10-24T10:00:00.000Z,2024-10-24T10:00:00.000Z,' +
+    'Unjust,2024-10-24T10:00:00.000Z,Punish,2024-10-24T10:00:00.000Z,2024-10-24T10:00:00.000Z,' +
+    'true,Cp,1,1,true,8,16,3,79,79,3,0,2024-10-24T10:00:00.000Z,2024-10-24T10:00:00.000Z';
+
+  beforeEach(() => {
+    vi.mocked(exportService.buildExportRows).mockResolvedValue([] as never);
+    vi.mocked(exportCsv.serializeExportCsv).mockReturnValue(MOCK_CSV);
+  });
+
+  it('401 sem token de autenticação', async () => {
+    const res = await request(app).get('/sessions/sess-001/export.csv');
+    expect(res.status).toBe(401);
+  });
+
+  it('chama buildExportRows com sessionId e researcherId do JWT', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export.csv')
+      .set('Authorization', BEARER);
+    expect(res.status).toBe(200);
+    expect(exportService.buildExportRows).toHaveBeenCalledWith('sess-001', RES_ID);
+  });
+
+  it('200 com resposta bem-sucedida', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export.csv')
+      .set('Authorization', BEARER);
+    expect(res.status).toBe(200);
+  });
+
+  it('Content-Type: text/csv; charset=utf-8', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export.csv')
+      .set('Authorization', BEARER);
+    expect(res.headers['content-type']).toMatch(/text\/csv/);
+    expect(res.headers['content-type']).toMatch(/charset=utf-8/);
+  });
+
+  it('Content-Disposition: attachment com filename correto', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export.csv')
+      .set('Authorization', BEARER);
+    expect(res.headers['content-disposition'])
+      .toBe('attachment; filename="session-sess-001.csv"');
+  });
+
+  it('Cache-Control: no-store', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export.csv')
+      .set('Authorization', BEARER);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('body contém cabeçalho CSV e linha de dados', async () => {
+    const res = await request(app)
+      .get('/sessions/sess-001/export.csv')
+      .set('Authorization', BEARER);
+    expect(res.text).toContain('sessionId,sessionName,sequenceVariant');
+    expect(res.text).toContain('sess-001');
+  });
+
+  it('404 quando sessão não existe ou pertence a outra pesquisadora', async () => {
+    vi.mocked(exportService.buildExportRows).mockRejectedValue(
+      new SessionBootstrapError('Session não encontrada: sess-001')
+    );
+    const res = await request(app)
+      .get('/sessions/sess-001/export.csv')
+      .set('Authorization', BEARER);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/não encontrada/);
+  });
+
+  it('não interfere nas rotas existentes', async () => {
+    vi.mocked(sessionService.listSessions).mockResolvedValue([] as never);
+    const res = await request(app)
+      .get('/sessions')
+      .set('Authorization', BEARER);
+    expect(res.status).toBe(200);
+    expect(res.body).toBeInstanceOf(Array);
   });
 });
