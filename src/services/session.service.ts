@@ -14,6 +14,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { type SequenceVariant } from '../domain/experiment.types';
 import { buildAttemptDrafts, SessionBootstrapError } from './session.drafts';
+import { deriveStage } from './participant.stage';
 
 // ---------------------------------------------------------------------------
 // Helper: carrega e valida ownership de uma Session
@@ -178,6 +179,7 @@ export async function getSessionPanel(sessionId: string, researcherId: string) {
           participantCode: true, joinedAt: true, lastSeenAt: true,
           // accessToken excluído
         },
+        orderBy: { slot: 'asc' },
       },
       attempts: {
         select: {
@@ -192,6 +194,9 @@ export async function getSessionPanel(sessionId: string, researcherId: string) {
 
   if (!session) throw new SessionBootstrapError(`Session não encontrada: ${sessionId}`);
 
+  const sessionStatus = session.status;
+
+  // Progresso dos attempts
   const totalAttempts = session.attempts.length;
   const finalizedAttempts = session.attempts.filter(
     (a: { completedAt: Date | null; responses: { resultAcknowledgedAt: Date | null }[] }) =>
@@ -203,14 +208,105 @@ export async function getSessionPanel(sessionId: string, researcherId: string) {
       a.responses.every((r: { resultAcknowledgedAt: Date | null }) => r.resultAcknowledgedAt !== null),
   ).length;
 
+  // Attempt ativo: reutiliza o mesmo conceito de participant.service.ts (sem writes)
+  // Busca apenas o necessário para derivar estágio e activeAttemptNumber
+  type AttemptForPanel = {
+    globalNumber: number;
+    completedAt:  Date | null;
+    trialRecord:  { id: string } | null;
+    responses: {
+      sessionParticipantId: string;
+      judgment:             string | null;
+      punishment:           string | null;
+      resultAcknowledgedAt: Date | null;
+    }[];
+  };
+
+  let activeAttempt: AttemptForPanel | null = null;
+
+  if (sessionStatus === 'IN_PROGRESS') {
+    activeAttempt = await prisma.attempt.findFirst({
+      where: {
+        sessionId,
+        OR: [
+          { completedAt: null },
+          {
+            completedAt: { not: null },
+            trialRecord: { isNot: null },
+            responses: { some: { resultAcknowledgedAt: null } },
+          },
+        ],
+      },
+      orderBy: { globalNumber: 'asc' },
+      select: {
+        globalNumber: true,
+        completedAt:  true,
+        trialRecord:  { select: { id: true } },
+        responses: {
+          select: {
+            sessionParticipantId: true,
+            judgment:             true,
+            punishment:           true,
+            resultAcknowledgedAt: true,
+          },
+        },
+      },
+    });
+  }
+
+  const activeAttemptNumber: number | null = activeAttempt?.globalNumber ?? null;
+  const attemptFinalized = !!(activeAttempt?.trialRecord && activeAttempt?.completedAt);
+
+  // Derivar estágio de cada participante usando deriveStage do domínio (sem writes)
+  const participantsWithStage = session.participants.map(
+    (sp: { id: string; slot: string; displayName: string; participantCode: string; joinedAt: Date | null; lastSeenAt: Date | null }) => {
+      let stage: ReturnType<typeof deriveStage>;
+
+      if (sessionStatus !== 'IN_PROGRESS') {
+        // WAITING → WAITING_SESSION, COMPLETED → COMPLETED
+        stage = deriveStage(sessionStatus, false, null, null, false);
+      } else if (!activeAttempt) {
+        // Sem attempt ativo: todas finalizadas com acks
+        stage = deriveStage('IN_PROGRESS', false, null, null, false);
+      } else {
+        // Respostas deste participante no attempt ativo
+        const ownRaw = activeAttempt.responses.find(r => r.sessionParticipantId === sp.id);
+        const ownResponse = ownRaw
+          ? { judgment: ownRaw.judgment, punishment: ownRaw.punishment,
+              resultAcknowledgedAt: ownRaw.resultAcknowledgedAt }
+          : null;
+
+        // Status do parceiro (o outro participante no mesmo attempt)
+        const partnerRaw = activeAttempt.responses.find(r => r.sessionParticipantId !== sp.id);
+        const partnerStatus = {
+          hasJudgment:   !!(partnerRaw?.judgment),
+          hasPunishment: !!(partnerRaw?.punishment),
+          hasAck:        !!(partnerRaw?.resultAcknowledgedAt),
+        };
+
+        stage = deriveStage('IN_PROGRESS', true, ownResponse, partnerStatus, attemptFinalized);
+      }
+
+      return {
+        id:              sp.id,
+        slot:            sp.slot,
+        displayName:     sp.displayName,
+        participantCode: sp.participantCode,
+        joinedAt:        sp.joinedAt,
+        lastSeenAt:      sp.lastSeenAt,
+        stage,
+      };
+    }
+  );
+
   return {
     session: {
       id: session.id, name: session.name,
       sequenceVariant: session.sequenceVariant, status: session.status,
       startedAt: session.startedAt, completedAt: session.completedAt,
     },
-    participants: session.participants,
-    progress: { totalAttempts, finalizedAttempts, acknowledgedAttempts },
+    participants: participantsWithStage,
+    progress: { totalAttempts, finalizedAttempts, acknowledgedAttempts, activeAttemptNumber },
   };
 }
 

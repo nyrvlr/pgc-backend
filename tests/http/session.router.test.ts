@@ -380,10 +380,12 @@ describe('GET /sessions/:sessionId/panel', () => {
       status: 'IN_PROGRESS', startedAt: new Date().toISOString(), completedAt: null,
     },
     participants: [
-      { id: 'sp-001', slot: 'P1', displayName: 'Alice', participantCode: 'G1P1', joinedAt: null, lastSeenAt: null },
-      { id: 'sp-002', slot: 'P2', displayName: 'Bob',   participantCode: 'G1P2', joinedAt: null, lastSeenAt: null },
+      { id: 'sp-001', slot: 'P1', displayName: 'Alice', participantCode: 'G1P1',
+        joinedAt: null, lastSeenAt: null, stage: 'JUDGMENT' },
+      { id: 'sp-002', slot: 'P2', displayName: 'Bob', participantCode: 'G1P2',
+        joinedAt: null, lastSeenAt: null, stage: 'WAITING_JUDGMENT_PARTNER' },
     ],
-    progress: { totalAttempts: 64, finalizedAttempts: 10, acknowledgedAttempts: 9 },
+    progress: { totalAttempts: 64, finalizedAttempts: 10, acknowledgedAttempts: 9, activeAttemptNumber: 11 },
   };
 
   it('200 com panel completo para a pesquisadora dona', async () => {
@@ -395,10 +397,41 @@ describe('GET /sessions/:sessionId/panel', () => {
     expect(sessionService.getSessionPanel).toHaveBeenCalledWith('sess-001', RES_ID);
   });
 
+  it('participantes incluem stage correto', async () => {
+    vi.mocked(sessionService.getSessionPanel).mockResolvedValue(mockPanel as never);
+    const res = await request(app).get('/sessions/sess-001/panel').set('Authorization', BEARER);
+    expect(res.body.participants[0].stage).toBe('JUDGMENT');
+    expect(res.body.participants[1].stage).toBe('WAITING_JUDGMENT_PARTNER');
+  });
+
+  it('progress inclui activeAttemptNumber', async () => {
+    vi.mocked(sessionService.getSessionPanel).mockResolvedValue(mockPanel as never);
+    const res = await request(app).get('/sessions/sess-001/panel').set('Authorization', BEARER);
+    expect(res.body.progress.activeAttemptNumber).toBe(11);
+  });
+
+  it('sessão WAITING → stage WAITING_SESSION, activeAttemptNumber null', async () => {
+    const panelWaiting = {
+      ...mockPanel,
+      session: { ...mockPanel.session, status: 'WAITING' },
+      participants: mockPanel.participants.map(p => ({ ...p, stage: 'WAITING_SESSION' })),
+      progress: { ...mockPanel.progress, activeAttemptNumber: null },
+    };
+    vi.mocked(sessionService.getSessionPanel).mockResolvedValue(panelWaiting as never);
+    const res = await request(app).get('/sessions/sess-001/panel').set('Authorization', BEARER);
+    expect(res.body.participants[0].stage).toBe('WAITING_SESSION');
+    expect(res.body.progress.activeAttemptNumber).toBeNull();
+  });
+
+  it('header Cache-Control: no-store presente', async () => {
+    vi.mocked(sessionService.getSessionPanel).mockResolvedValue(mockPanel as never);
+    const res = await request(app).get('/sessions/sess-001/panel').set('Authorization', BEARER);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
   it('panel não expõe accessToken dos participantes', async () => {
     vi.mocked(sessionService.getSessionPanel).mockResolvedValue(mockPanel as never);
     const res = await request(app).get('/sessions/sess-001/panel').set('Authorization', BEARER);
-    expect(res.status).toBe(200);
     for (const p of res.body.participants) {
       expect(p.accessToken).toBeUndefined();
     }

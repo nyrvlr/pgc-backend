@@ -135,6 +135,7 @@ sessionRouter.get('/:sessionId/panel', async (req: Request, res: Response, next:
   const sessionId = req.params['sessionId'] as string;
   try {
     const panel = await getSessionPanel(sessionId, req.researcherId!);
+    res.setHeader('Cache-Control', 'no-store');
     res.status(200).json(panel);
   } catch (err) {
     next(err);
