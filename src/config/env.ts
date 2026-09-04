@@ -11,8 +11,9 @@ function required(name: string): string {
 }
 
 export const env = {
-  port: Number(process.env.PORT ?? 3000),
+  port:       Number(process.env.PORT ?? 3000),
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
   databaseUrl: required("DATABASE_URL"),
-  nodeEnv: process.env.NODE_ENV ?? "development",
+  jwtSecret:   required("JWT_SECRET"),
+  nodeEnv:    process.env.NODE_ENV ?? "development",
 };

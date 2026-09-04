@@ -9,6 +9,7 @@ import cors from 'cors';
 import { SessionBootstrapError } from '../services/session.drafts';
 import { sessionRouter } from './session.router';
 import { participantRouter } from './participant.router';
+import { authRouter } from './auth.router';
 
 export const app = express();
 
@@ -23,6 +24,7 @@ app.use(express.json());
 // Routers
 // ---------------------------------------------------------------------------
 
+app.use('/auth', authRouter);
 app.use('/sessions', sessionRouter);
 app.use('/participant', participantRouter);
 
